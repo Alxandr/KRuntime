@@ -27,71 +27,50 @@ namespace Microsoft.Framework.ApplicationHost
             _serviceProvider = serviceProvider;
         }
 
-        public Task<int> Main(string[] args)
+        public async Task<int> Main(string[] args)
         {
-            DefaultHostOptions options;
-            string[] programArgs;
-
-            var isShowingInformation = ParseArgs(args, out options, out programArgs);
-            if (isShowingInformation)
+            var parseResult = await ParseArgs(args);
+            if (parseResult.IsShowingInformation)
             {
-                return Task.FromResult(0);
+                return 0;
             }
 
-            var host = new DefaultHost(options, _serviceProvider);
+            var host = new DefaultHost(parseResult.Options, _serviceProvider);
 
             if (host.Project == null)
             {
-                return Task.FromResult(-1);
+                return -1;
             }
 
-            var lookupCommand = string.IsNullOrEmpty(options.ApplicationName) ? "run" : options.ApplicationName;
+            var lookupCommand = string.IsNullOrEmpty(
+                parseResult.Options.ApplicationName) ? "run" : parseResult.Options.ApplicationName;
+
             string replacementCommand;
             if (host.Project.Commands.TryGetValue(lookupCommand, out replacementCommand))
             {
                 var replacementArgs = CommandGrammar.Process(
                     replacementCommand,
                     GetVariable).ToArray();
-                options.ApplicationName = replacementArgs.First();
-                programArgs = replacementArgs.Skip(1).Concat(programArgs).ToArray();
+                parseResult.Options.ApplicationName = replacementArgs.First();
+                parseResult.ProgramArgs = replacementArgs.Skip(1).Concat(parseResult.ProgramArgs).ToArray();
             }
 
-            if (string.IsNullOrEmpty(options.ApplicationName) ||
-                string.Equals(options.ApplicationName, "run", StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(parseResult.Options.ApplicationName) ||
+                string.Equals(parseResult.Options.ApplicationName, "run", StringComparison.Ordinal))
             {
                 if (string.IsNullOrEmpty(host.Project.Name))
                 {
-                    options.ApplicationName = Path.GetFileName(options.ApplicationBaseDirectory);
+                    parseResult.Options.ApplicationName = Path.GetFileName(parseResult.Options.ApplicationBaseDirectory);
                 }
                 else
                 {
-                    options.ApplicationName = host.Project.Name;
+                    parseResult.Options.ApplicationName = host.Project.Name;
                 }
             }
 
-            IDisposable disposable = null;
-
-            try
+            using(var disposable = host.AddLoaders(_container))
             {
-                disposable = host.AddLoaders(_container);
-
-                return ExecuteMain(host, options.ApplicationName, programArgs)
-                        .ContinueWith(async (t, state) =>
-                        {
-                            ((IDisposable)state).Dispose();
-                            return await t;
-                        },
-                        disposable).Unwrap();
-            }
-            catch
-            {
-                // If there's an error, dispose the host and throw
-                if (disposable != null)
-                {
-                    disposable.Dispose();
-                }
-
-                throw;
+                return await ExecuteMain(host, parseResult.Options.ApplicationName, parseResult.ProgramArgs);
             }
         }
 
@@ -117,8 +96,11 @@ namespace Microsoft.Framework.ApplicationHost
         }
 
 
-        private bool ParseArgs(string[] args, out DefaultHostOptions defaultHostOptions, out string[] outArgs)
+        private async Task<ParseResult> ParseArgs(string[] args)
         {
+            DefaultHostOptions defaultHostOptions;
+            string[] outArgs;
+
             var app = new CommandLineApplication(throwOnUnexpectedArg: false);
             app.Name = "k";
             var optionWatch = app.Option("--watch", "Watch file changes", CommandOptionType.NoValue);
@@ -142,7 +124,7 @@ namespace Microsoft.Framework.ApplicationHost
             },
             addHelpCommand: false,
             throwOnUnexpectedArg: false);
-            app.Execute(args);
+            await app.Execute(args);
 
             if (!(app.IsShowingInformation || app.RemainingArguments.Any() || runCmdExecuted))
             {
@@ -180,7 +162,12 @@ namespace Microsoft.Framework.ApplicationHost
                 outArgs = remainingArgs.ToArray();
             }
 
-            return app.IsShowingInformation;
+            return new ParseResult
+            {
+                IsShowingInformation = app.IsShowingInformation,
+                Options = defaultHostOptions,
+                ProgramArgs = outArgs
+            };
         }
 
         private Task<int> ExecuteMain(DefaultHost host, string applicationName, string[] args)
@@ -271,6 +258,13 @@ namespace Microsoft.Framework.ApplicationHost
             var assembly = typeof(Program).GetTypeInfo().Assembly;
             var assemblyInformationalVersionAttribute = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
             return assemblyInformationalVersionAttribute.InformationalVersion;
+        }
+
+        private struct ParseResult
+        {
+            public bool IsShowingInformation { get; set; }
+            public DefaultHostOptions Options { get; set; }
+            public string[] ProgramArgs { get; set; }
         }
     }
 }

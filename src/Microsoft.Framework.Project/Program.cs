@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System.IO;
+using System.Threading.Tasks;
 using Microsoft.Framework.Runtime;
 using Microsoft.Framework.Runtime.Common.CommandLine;
 
@@ -16,7 +17,7 @@ namespace Microsoft.Framework.Project
             _environment = environment;
         }
 
-        public int Main(string[] args)
+        public async Task<int> Main(string[] args)
         {
             var app = new CommandLineApplication(throwOnUnexpectedArg: false);
             app.Name = "Microsoft.Framework.Project";
@@ -58,7 +59,7 @@ namespace Microsoft.Framework.Project
                 });
             });
 
-            app.Execute(args);
+            await app.Execute(args);
 
             return 0;
         }

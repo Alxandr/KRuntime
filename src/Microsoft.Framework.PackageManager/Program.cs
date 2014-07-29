@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Framework.PackageManager.Packing;
 using Microsoft.Framework.Runtime;
 using Microsoft.Framework.Runtime.Common.CommandLine;
@@ -31,7 +32,7 @@ namespace Microsoft.Framework.PackageManager
 #endif
         }
 
-        public int Main(string[] args)
+        public Task<int> Main(string[] args)
         {
             _originalForeground = Console.ForegroundColor;
 

@@ -75,7 +75,7 @@ namespace klr.hosting
             }
         }
 
-        public static Task<int> ExecuteAsync(string[] args)
+        public static async Task<int> ExecuteAsync(string[] args)
         {
             var enableTrace = Environment.GetEnvironmentVariable("KRE_TRACE") == "1";
 #if NET45
@@ -93,7 +93,7 @@ namespace klr.hosting
                 CommandOptionType.MultipleValue);
             app.HelpOption("-?|-h|--help");
             app.VersionOption("--version", GetVersion());
-            app.Execute(args);
+            await app.Execute(args);
 
             if (!app.IsShowingInformation && !app.RemainingArguments.Any())
             {
@@ -102,7 +102,7 @@ namespace klr.hosting
 
             if (app.IsShowingInformation)
             {
-                return Task.FromResult(0);
+                return 0;
             }
 
             // Resolve the lib paths
@@ -224,41 +224,22 @@ namespace klr.hosting
                 var libLoader = Activator.CreateInstance(pathBasedLoaderType, new object[] { loaderEngine, searchPaths });
 
                 MethodInfo addLoaderMethodInfo = loaderContainerType.GetTypeInfo().GetDeclaredMethod("AddLoader");
-                var disposable = (IDisposable)addLoaderMethodInfo.Invoke(loaderContainer, new[] { libLoader });
-                var loaderContainerLoadMethodInfo = loaderContainerType.GetTypeInfo().GetDeclaredMethod("Load");
-
-                loader = (Func<string, Assembly>)loaderContainerLoadMethodInfo.CreateDelegate(typeof(Func<string, Assembly>), loaderContainer);
-
-                var bootstrapperType = assembly.GetType("klr.host.Bootstrapper");
-                var mainMethod = bootstrapperType.GetTypeInfo().GetDeclaredMethod("Main");
-                var bootstrapper = Activator.CreateInstance(bootstrapperType, loaderContainer, loaderEngine);
-
-                try
+                using (var disposable = (IDisposable)addLoaderMethodInfo.Invoke(loaderContainer, new[] { libLoader }))
                 {
+                    var loaderContainerLoadMethodInfo = loaderContainerType.GetTypeInfo().GetDeclaredMethod("Load");
+
+                    loader = (Func<string, Assembly>)loaderContainerLoadMethodInfo.CreateDelegate(typeof(Func<string, Assembly>), loaderContainer);
+
+                    var bootstrapperType = assembly.GetType("klr.host.Bootstrapper");
+                    var mainMethod = bootstrapperType.GetTypeInfo().GetDeclaredMethod("Main");
+                    var bootstrapper = Activator.CreateInstance(bootstrapperType, loaderContainer, loaderEngine);
+
                     var bootstrapperArgs = new object[]
                     {
                         app.RemainingArguments.ToArray()
                     };
 
-                    var task = (Task<int>)mainMethod.Invoke(bootstrapper, bootstrapperArgs);
-
-                    return task.ContinueWith(async (t, state) =>
-                    {
-                        // Dispose the host
-                        ((IDisposable)state).Dispose();
-
-#if NET45
-                        AppDomain.CurrentDomain.AssemblyResolve -= handler;
-#endif
-                        return await t;
-                    },
-                    disposable).Unwrap();
-                }
-                catch
-                {
-                    // If we throw synchronously then dispose then rethtrow
-                    disposable.Dispose();
-                    throw;
+                    return await (Task<int>)mainMethod.Invoke(bootstrapper, bootstrapperArgs);
                 }
             }
             catch

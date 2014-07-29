@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Microsoft.Framework.Runtime.Common.CommandLine
 {
@@ -22,7 +23,7 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
             Arguments = new List<CommandArgument>();
             Commands = new List<CommandLineApplication>();
             RemainingArguments = new List<string>();
-            Invoke = () => 0;
+            Invoke = () => Task.FromResult(0);
         }
 
         public CommandLineApplication Parent { get; set; }
@@ -35,7 +36,7 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
         public List<CommandArgument> Arguments { get; private set; }
         public List<string> RemainingArguments { get; private set; }
         public bool IsShowingInformation { get; protected set; }  // Is showing help or version?
-        public Func<int> Invoke { get; set; }
+        public Func<Task<int>> Invoke { get; set; }
         public string Version { get; set; }
 
         public List<CommandLineApplication> Commands { get; private set; }
@@ -101,10 +102,15 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
 
         public void OnExecute(Func<int> invoke)
         {
+            Invoke = () => Task.FromResult(invoke());
+        }
+
+        public void OnExecute(Func<Task<int>> invoke)
+        {
             Invoke = invoke;
         }
 
-        public int Execute(params string[] args)
+        public async Task<int> Execute(params string[] args)
         {
             CommandLineApplication command = this;
             CommandOption option = null;
@@ -277,7 +283,7 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 throw new Exception(string.Format("TODO: Error: missing value for option"));
             }
 
-            return command.Invoke();
+            return await command.Invoke();
         }
 
         // Helper method that adds a help option

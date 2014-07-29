@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Microsoft.Framework.Runtime.Common.CommandLine
@@ -9,7 +10,7 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
     public class CommandLineApplicationTests
     {
         [Fact]
-        public void CommandNameCanBeMatched()
+        public async Task CommandNameCanBeMatched()
         {
             var called = false;
 
@@ -23,13 +24,13 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 });
             });
 
-            var result = app.Execute("test");
+            var result = await app.Execute("test");
             Assert.Equal(5, result);
             Assert.True(called);
         }
 
         [Fact]
-        public void RemainingArgsArePassed()
+        public async Task RemainingArgsArePassed()
         {
             CommandArgument first = null;
             CommandArgument second = null;
@@ -43,14 +44,14 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            app.Execute("test", "one", "two");
+            await app.Execute("test", "one", "two");
 
             Assert.Equal("one", first.Value);
             Assert.Equal("two", second.Value);
         }
 
         [Fact]
-        public void ExtraArgumentCausesException()
+        public async Task ExtraArgumentCausesException()
         {
             CommandArgument first = null;
             CommandArgument second = null;
@@ -64,13 +65,13 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            var ex = Assert.Throws<Exception>(() => app.Execute("test", "one", "two", "three"));
+            var ex = await Assert.ThrowsAsync<Exception>(() => app.Execute("test", "one", "two", "three"));
 
             Assert.Contains("three", ex.Message);
         }
 
         [Fact]
-        public void UnknownCommandCausesException()
+        public async Task UnknownCommandCausesException()
         {
             var app = new CommandLineApplication();
 
@@ -81,13 +82,13 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            var ex = Assert.Throws<Exception>(() => app.Execute("test2", "one", "two", "three"));
+            var ex = await Assert.ThrowsAsync<Exception>(() => app.Execute("test2", "one", "two", "three"));
 
             Assert.Contains("test2", ex.Message);
         }
 
         [Fact]
-        public void OptionSwitchMayBeProvided()
+        public async Task OptionSwitchMayBeProvided()
         {
             CommandOption first = null;
             CommandOption second = null;
@@ -101,14 +102,14 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            app.Execute("test", "--first", "one", "--second", "two");
+            await app.Execute("test", "--first", "one", "--second", "two");
 
             Assert.Equal("one", first.Values[0]);
             Assert.Equal("two", second.Values[0]);
         }
 
         [Fact]
-        public void OptionValueMustBeProvided()
+        public async Task OptionValueMustBeProvided()
         {
             CommandOption first = null;
 
@@ -120,13 +121,13 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            var ex = Assert.Throws<Exception>(() => app.Execute("test", "--first"));
+            var ex = await Assert.ThrowsAsync<Exception>(() => app.Execute("test", "--first"));
 
             Assert.Contains("missing value for option", ex.Message);
         }
 
         [Fact]
-        public void ValuesMayBeAttachedToSwitch()
+        public async Task ValuesMayBeAttachedToSwitch()
         {
             CommandOption first = null;
             CommandOption second = null;
@@ -140,14 +141,14 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            app.Execute("test", "--first=one", "--second:two");
+            await app.Execute("test", "--first=one", "--second:two");
 
             Assert.Equal("one", first.Values[0]);
             Assert.Equal("two", second.Values[0]);
         }
 
         [Fact]
-        public void ShortNamesMayBeDefined()
+        public async Task ShortNamesMayBeDefined()
         {
             CommandOption first = null;
             CommandOption second = null;
@@ -161,10 +162,29 @@ namespace Microsoft.Framework.Runtime.Common.CommandLine
                 c.OnExecute(() => 0);
             });
 
-            app.Execute("test", "-1=one", "-2", "two");
+            await app.Execute("test", "-1=one", "-2", "two");
 
             Assert.Equal("one", first.Values[0]);
             Assert.Equal("two", second.Values[0]);
+        }
+
+        [Fact]
+        public async Task HandlesAsyncExecutes()
+        {
+            bool called = false;
+
+            var app = new CommandLineApplication();
+
+            app.OnExecute(async () =>
+            {
+                await Task.Delay(5);
+                called = true;
+                return 0;
+            });
+
+            await app.Execute();
+
+            Assert.True(called);
         }
     }
 }
